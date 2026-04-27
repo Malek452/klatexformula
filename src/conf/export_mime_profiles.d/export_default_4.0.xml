@@ -240,6 +240,13 @@
       <default-qt-formats type="urls" />
     </export-type>
   </profile>
+  <profile name="temp-svg-file">
+    <in-submenu>Temporary File</in-submenu>
+    <description>Temp SVG File</description>
+    <export-type exporter="KLFTempFileUriExporter" format="SVG">
+      <default-qt-formats type="urls" />
+    </export-type>
+  </profile>
 
   <!-- Specific formats -->
   <profile name="KLFBackendFormatsExporter-pdf">

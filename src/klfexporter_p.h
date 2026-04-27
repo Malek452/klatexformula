@@ -882,7 +882,7 @@ public:
   {
     int req_dpi = params.value("dpi", QVariant(-1)).toInt();
 
-    QString tempfilename = tempFileForOutput(format, klfoutput, req_dpi);
+    QString tempfilename = tempFileForOutput(format, klfoutput, req_dpi, getExporterManager());
     QUrl url = QUrl::fromLocalFile(tempfilename);
 
     const QString sep = params.value("separator", QString::fromLatin1("\n")).toString();
@@ -892,7 +892,7 @@ public:
   }
 
   static QString tempFileForOutput(const QString & reqfmt, const KLFBackend::klfOutput& output,
-                                   int targetDpi = -1)
+                                   int targetDpi = -1, KLFExporterManager * exMgr = NULL)
   {
     KLF_DEBUG_BLOCK(KLF_FUNC_NAME) ;
 
@@ -925,10 +925,30 @@ public:
 
     QString tempfilename = QFileInfo(tempfile->fileName()).absoluteFilePath();
 
+    bool saved = false;
     if (isVectorFormat(format) || targetDpi <= 0 || targetDpi == output.input.dpi) {
       QString errStr;
-      bool res = KLFBackend::saveOutputToDevice(output, tempfile, format, &errStr);
-      if (!res) {
+      saved = KLFBackend::saveOutputToDevice(output, tempfile, format, &errStr);
+      if (!saved && format == QLatin1String("svg")) {
+        tempfile->resize(0);
+        tempfile->seek(0);
+
+        KLFExporterNameAndFormatList svg_exporter_formats;
+        svg_exporter_formats
+          << KLFExporterNameAndFormat("UserScript:svg-dvisvgm", "svg")
+          << KLFExporterNameAndFormat("UserScript:inkscapeformats", "svg");
+
+        if (exMgr != NULL) {
+          QByteArray svgdata = exMgr->getDataByExporterNamesAndFormats(svg_exporter_formats, output,
+                                                                       QVariantMap());
+          if (!svgdata.isEmpty()) {
+            if (tempfile->write(svgdata) == svgdata.size()) {
+              saved = true;
+            }
+          }
+        }
+      }
+      if (!saved) {
         klfWarning("Can't save to temp file " << tempfilename << ": " << errStr) ;
         tempfile->close();
         return QString();
