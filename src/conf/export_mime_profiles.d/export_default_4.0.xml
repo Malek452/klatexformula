@@ -247,6 +247,16 @@
       <default-qt-formats type="urls" />
     </export-type>
   </profile>
+  <profile name="libreoffice-svg">
+    <in-submenu>Specific Applications</in-submenu>
+    <description>LibreOffice Writer (SVG)</description>
+    <export-type exporter="KLFTempFileUriExporter" format="SVG">
+      <default-qt-formats type="urls" />
+    </export-type>
+    <export-type exporter="UserScript:svg-dvisvgm" format="svg">
+      <mime-type>image/svg+xml</mime-type>
+    </export-type>
+  </profile>
 
   <!-- Specific formats -->
   <profile name="KLFBackendFormatsExporter-pdf">
