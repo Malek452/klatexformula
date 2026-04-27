@@ -3850,44 +3850,92 @@ void KLFMainWin::slotSave(const QString& suggestfname)
   // save this path as default to suggest next time
   klfconfig.UI.lastSaveDir = fi.absolutePath();
 
-  // selected filter should match to an exporter
-  if ( exporterByFilterName.contains(selectedfilter) ) {
-    // use an external output-saver
-    QString formatname = formatsByFilterName[selectedfilter];
-    KLFExporter * exporter = exporterByFilterName[selectedfilter];
+  QString formatname;
+  KLFExporter * exporter = NULL;
 
-    if (exporter == NULL) {
-      klfWarning("Internal error: exporter is NULL!");
-      return;
+  auto pickExporterFromSelectedFilter = [&]() -> bool {
+    if (!exporterByFilterName.contains(selectedfilter)) {
+      return false;
+    }
+    formatname = formatsByFilterName[selectedfilter];
+    exporter = exporterByFilterName[selectedfilter];
+    return exporter != NULL;
+  };
+
+  auto pickExporterFromFileExtension = [&]() -> bool {
+    const QString suffix = fi.suffix().toLower();
+    if (suffix.isEmpty()) {
+      return false;
     }
 
-    klfDbg( "Saving using exporter `" << exporter->exporterName() << "' with format `" << formatname << "'" ) ;
-
-    QByteArray data = exporter->getData(formatname, d->output);
-    if (data.isEmpty()) {
-      QMessageBox::critical(this, tr("Error saving file"),
-                            tr("Error exporting the data: %1").arg(exporter->errorString()));
-      return;
-    }
-    {
-      QFile fout(fname);
-      bool ok = fout.open(QIODevice::WriteOnly);
-      if (!ok) {
-        QMessageBox::critical(this, tr("Error saving file"),
-                              tr("Can't write to file %1: %2").arg(fname).arg(fout.errorString()));
-        return;
+    for (int i = 0; i < exporters.size(); ++i) {
+      KLFExporter * candidateExporter = exporters[i];
+      if (!candidateExporter->isSuitableForFileSave()) {
+        continue;
       }
-      fout.write(data);
-      fout.close();
+      QStringList candidateFormats = candidateExporter->supportedFormats(d->output);
+      for (int fmtIndex = 0; fmtIndex < candidateFormats.size(); ++fmtIndex) {
+        const QString candidateFormat = candidateFormats[fmtIndex];
+        const QStringList exts = candidateExporter->fileNameExtensionsFor(candidateFormat);
+        for (int extIndex = 0; extIndex < exts.size(); ++extIndex) {
+          if (exts[extIndex].toLower() == suffix) {
+            exporter = candidateExporter;
+            formatname = candidateFormat;
+            return true;
+          }
+        }
+      }
     }
-    
-    emit savedToFile(fname, formatname, exporter);
+
+    return false;
+  };
+
+  // selected filter should match to an exporter
+  if (!pickExporterFromSelectedFilter()) {
+    klfWarning("Invalid selected filter: " << selectedfilter << "!") ;
+  } else {
+    const QString suffix = fi.suffix().toLower();
+    const QStringList selectedFilterExts = exporter->fileNameExtensionsFor(formatname);
+    bool selectedFilterMatchesExtension = suffix.isEmpty();
+    for (int i = 0; i < selectedFilterExts.size(); ++i) {
+      if (selectedFilterExts[i].toLower() == suffix) {
+        selectedFilterMatchesExtension = true;
+        break;
+      }
+    }
+    if (!selectedFilterMatchesExtension && pickExporterFromFileExtension()) {
+      klfDbg("Selected file extension overrides mismatched save filter; using exporter `"
+             << exporter->exporterName() << "' with format `" << formatname << "'.");
+    }
+  }
+
+  if (exporter == NULL) {
+    QMessageBox::critical(this, tr("Error saving file"),
+                          tr("Internal error: can't determine save format"));
     return;
   }
 
-  klfWarning("Invalid selected filter: " << selectedfilter << "!") ;
-  QMessageBox::critical(this, tr("Error saving file"),
-                        tr("Internal error: can't determine save format"));
+  klfDbg( "Saving using exporter `" << exporter->exporterName() << "' with format `" << formatname << "'" ) ;
+
+  QByteArray data = exporter->getData(formatname, d->output);
+  if (data.isEmpty()) {
+    QMessageBox::critical(this, tr("Error saving file"),
+                          tr("Error exporting the data: %1").arg(exporter->errorString()));
+    return;
+  }
+  {
+    QFile fout(fname);
+    bool ok = fout.open(QIODevice::WriteOnly);
+    if (!ok) {
+      QMessageBox::critical(this, tr("Error saving file"),
+                            tr("Can't write to file %1: %2").arg(fname).arg(fout.errorString()));
+      return;
+    }
+    fout.write(data);
+    fout.close();
+  }
+
+  emit savedToFile(fname, formatname, exporter);
 }
 
 void KLFMainWin::slotActivateEditor()
@@ -4385,7 +4433,6 @@ void KLFMainWin::closeEvent(QCloseEvent *event)
   klfDbg(" quitting.") ;
   quit();
 }
-
 
 
 
